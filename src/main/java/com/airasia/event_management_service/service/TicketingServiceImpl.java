@@ -15,7 +15,9 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -31,9 +33,7 @@ public class TicketingServiceImpl implements TicketingService {
     @Transactional
     public List<TicketDTO> bookTickets(TicketRequestDTO ticketRequestDTO) {
         List<TicketDTO> bookedTickets = new ArrayList<>();
-        EventSummary evtSummary = eventSummaryRepository
-                .getEventSummaryByEventId(ticketRequestDTO.getEventID())
-                .orElse(null);
+        EventSummary evtSummary = eventSummaryRepository.getEventSummaryByEventId(ticketRequestDTO.getEventID()).orElse(null);
 
         ticketValidator.validate(ticketRequestDTO);
 
@@ -50,4 +50,36 @@ public class TicketingServiceImpl implements TicketingService {
 
         return bookedTickets;
     }
+
+    @Override
+    @Transactional
+    public void rollbackTickets(List<String> ticketIds) {
+
+        if (ticketIds == null || ticketIds.isEmpty()) {
+            return;
+        }
+
+        List<Ticket> tickets = ticketRepository.findTickets(ticketIds).orElse(null);
+
+        if (Objects.isNull(tickets)|| tickets.size() != ticketIds.size()) {
+            throw new IllegalStateException("Some tickets were not found for rollback");
+        }
+
+        Map<String, Long> rollbackCountByEvent = tickets.stream().collect(Collectors.groupingBy(Ticket::getEventID, Collectors.counting()));
+
+        ticketRepository.deleteAll(tickets);
+
+        rollbackCountByEvent.forEach((eventId, count) -> {
+            EventSummary summary = eventSummaryRepository.getEventSummaryByEventId(eventId).orElseThrow(() -> new IllegalStateException("Event summary not found for eventId: " + eventId));
+
+            summary.setBookings(summary.getBookings() - count.intValue());
+
+            if (summary.getBookings() < 0) {
+                summary.setBookings(0);
+            }
+
+            eventSummaryRepository.save(summary);
+        });
+    }
+
 }

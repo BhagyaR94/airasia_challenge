@@ -22,4 +22,11 @@ public class TicketController {
     public ResponseEntity<List<TicketDTO>> bookTicket(@RequestBody final TicketRequestDTO ticketDTO) {
         return ResponseEntity.ok(ticketingService.bookTickets(ticketDTO));
     }
+
+    @PostMapping("/cancel")
+    public ResponseEntity<Void> cancelTickets(@RequestBody List<String> ticketIds) {
+        ticketingService.rollbackTickets(ticketIds);
+        return ResponseEntity.noContent().build();
+    }
+
 }
